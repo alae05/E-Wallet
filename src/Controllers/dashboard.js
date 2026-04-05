@@ -301,92 +301,102 @@ function addTransactionsR(nom, amount2){
 
 // **************************************transfer***************************************************//
 
-function transfer(expediteur, numcompte, amount) {
+async function transfer(expediteur, numcompte, amount) {
   console.log("Starting transfer...");
 
-  checkUser(numcompte)
-    .then((destinataire) => {
-      console.log("Step 1: Destinataire found -", destinataire.name);
-      return checkSolde(expediteur, amount).then(() => destinataire);
-    })
-    .then((destinataire) => {
-      console.log("Step 2: Balance verified");
-      return updateSolde(expediteur, destinataire, amount).then(() => destinataire);
-    })
-    .then((destinataire) => {
-      console.log("Step 3: Balances updated");
-      return addtransactions(expediteur, destinataire, amount);
-    })
-    .then((message) => {
-      console.log("Step 4:", message);
-      renderDashboard(); 
-      closeTransfer();    
-    })
-    .catch((error) => {
-      const failedTransaction = {
-        id: Date.now(),
-        type: "debit",
-        amount: amount,
-        date: new Date().toLocaleString(),
-        to: "Inconnu/Erreur",
-        statue: "failed" 
-      };
-      expediteur.wallet.transactions.push(failedTransaction);
+  try {
+    // Step 1: Find Beneficiary
+    const destinataire = await checkUser(numcompte);
+    console.log("Step 1: Destinataire found -", destinataire.name);
 
-      console.error("Transfer Failed:", error);
-      alert(error);
-    });
+    // Step 2: Check Balance
+    await checkSolde(expediteur, amount);
+    console.log("Step 2: Balance verified");
+
+    // Step 3: Update Balances
+    await updateSolde(expediteur, destinataire, amount);
+    console.log("Step 3: Balances updated");
+
+    // Step 4: Add Transactions
+    const message = await addtransactions(expediteur, destinataire, amount);
+    console.log("Step 4:", message);
+
+    // Save and Update UI
+    sessionStorage.setItem("currentUser", JSON.stringify(expediteur));
+    renderDashboard();
+    closeTransfer();
+    alert("Transfer successful!");
+
+  } catch (error) {
+    // Handle Failures
+    const failedTransaction = {
+      id: Date.now(),
+      type: "debit",
+      amount: amount,
+      date: new Date().toLocaleString(),
+      to: "Inconnu/Erreur",
+      statue: "failed"
+    };
+    
+    expediteur.wallet.transactions.push(failedTransaction);
+    sessionStorage.setItem("currentUser", JSON.stringify(expediteur));
+    
+    renderDashboard();
+    console.error("Transfer Failed:", error);
+    alert(error);
+  }
 }
 
-function recharge(nom, cardNum, amount2){
+async function recharge(nom, cardNum, amount2) {
   console.log("Starting recharge...");
 
-  checkCardExist(nom)
-    .then(() => {
-      console.log("Step 1: Card found -");
-      return checkCardValid(nom, cardNum).then(() => nom);
-    })
-    .then(() => {
-      console.log("Étape 2 : Valid card -");
-      // NOUVELLE ÉTAPE : Vérification du solde de la carte
-      return checkSoldeR(nom, cardNum, amount2);
-    })
-    .then(() => {
-      console.log("Step 3: Valid balance card -");
-      return updateSoldeR(nom, amount2).then(() => nom);
-    })
-    .then(() => {
-      console.log("Step 4: Sold updated -");
-      return addTransactionsR(nom, amount2);
-    })
-    .then((message) => {
-      console.log("Step 5:", message);
-      renderDashboard(); 
-      closeRecharge();    
-    })
-    .catch((error) => {
-      const failedRecharge = {
-        id: Date.now(),
-        type: "recharge",
-        amount: amount2,
-        date: new Date().toLocaleString(),
-        to: nom.name,
-        statue: "failed"
-      };
-      nom.wallet.transactions.push(failedRecharge);
+  try {
+    // Step 1: Check Card Exists
+    await checkCardExist(nom);
+    console.log("Step 1: Card found");
 
-      // 2. SAUVEGARDER dans le sessionStorage (Crucial !)
-      sessionStorage.setItem("currentUser", JSON.stringify(nom));
+    // Step 2: Check Card Validity
+    await checkCardValid(nom, cardNum);
+    console.log("Step 2: Valid card");
 
-      // 3. METTRE À JOUR L'AFFICHAGE (C'est ce qui manquait)
-      renderDashboard();
+    // Step 3: Check Balance
+    await checkSoldeR(nom, cardNum, amount2);
+    console.log("Step 3: Valid balance card");
 
-      console.error("Recharge Failed:", error);
-      alert(error);
-    });
+    // Step 4: Update Wallet Balance
+    await updateSoldeR(nom, amount2);
+    console.log("Step 4: Solde updated");
+
+    // Step 5: Log Transaction
+    const message = await addTransactionsR(nom, amount2);
+    console.log("Step 5:", message);
+
+    // Save and Update UI
+    sessionStorage.setItem("currentUser", JSON.stringify(nom));
+    renderDashboard();
+    closeRecharge();
+    alert("Recharge successful!");
+
+  } catch (error) {
+    const failedRecharge = {
+      id: Date.now(),
+      type: "recharge",
+      amount: amount2,
+      date: new Date().toLocaleString(),
+      to: nom.name,
+      statue: "failed"
+    };
+
+    nom.wallet.transactions.push(failedRecharge);
+    sessionStorage.setItem("currentUser", JSON.stringify(nom));
+    
+    renderDashboard();
+    console.error("Recharge Failed:", error);
+    alert(error);
+  }
 }
 
-function handleTransfer(e) {
+async function handleTransfer(e) {
  e.preventDefault();
   const beneficiaryId = document.getElementById("beneficiary").value;
   const beneficiaryAccount=findbeneficiarieByid(user.id,beneficiaryId).account;
@@ -394,16 +404,16 @@ function handleTransfer(e) {
 
   const amount = Number(document.getElementById("amount").value);
 
-transfer(user, beneficiaryAccount, amount);
+  await transfer(user, beneficiaryAccount, amount);
 
 } 
 
-function handleRecharge(e) {
+async function handleRecharge(e) {
  e.preventDefault();
   const sourceCard2 = document.getElementById("sourceCard2").value;
   const amount2 = Number(document.getElementById("amount2").value);
   if (amount2 >= 10 && amount2 <= 5000){
-    recharge(user, sourceCard2, amount2);
+    await recharge(user, sourceCard2, amount2);
   }else {
     alert("Amount must be between 10 - 5000");
   }
